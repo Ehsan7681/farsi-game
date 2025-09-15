@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>مزرعه کلمات</title>
+
+    <!-- PWA ADDITION: Meta tags for theme color, manifest, and icons -->
+    <meta name="theme-color" content="#87CEEB">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    <link rel="icon" type="image/png" href="icons/icon-192x192.png">
+    <!-- End PWA ADDITION -->
+
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+            touch-action: manipulation;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB, #fef3c7);
+        }
+
+        .text-shadow {
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+        }
+
+        .letter-draggable {
+            touch-action: none;
+            cursor: grab;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .letter-draggable.dragging {
+            position: absolute;
+            cursor: grabbing;
+            transform: scale(1.2);
+            z-index: 1000;
+            opacity: 0.95;
+            box-shadow: 0 10px 15px rgba(0,0,0,0.2);
+            transition: none;
+        }
+
+        .letter-dropzone {
+            transition: background-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .letter-dropzone.drag-over {
+            background-color: #a7f3d0;
+            transform: scale(1.05);
+            border-style: solid;
+        }
+
+        @keyframes growAndShine {
+            0% { transform: scale(0.5); opacity: 0.5; }
+            70% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .crop-grown {
+            animation: growAndShine 0.8s ease-out;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.5); opacity: 1; }
+            100% { transform: translateY(-80px) scale(1.5); opacity: 0; }
+        }
+        .coin-animation {
+            position: absolute;
+            animation: floatUp 1s ease-out forwards;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+        .animate-shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes fertileGlow {
+            0% { box-shadow: 0 0 10px 2px #fde047; }
+            50% { box-shadow: 0 0 20px 8px #fde047; }
+            100% { box-shadow: 0 0 10px 2px #fde047; }
+        }
+        .fertile-plot {
+            animation: fertileGlow 2s infinite;
+            border: 2px solid #fbbf24;
+        }
+
+        .farm-plot {
+            background-color: #A1662F;
+            border-bottom: 8px solid #6B4226;
+        }
+        .farm-plot.planted {
+             background-color: #597D35;
+             border-bottom-color: #3C5826;
+        }
+
+        @keyframes flyAcross {
+            from { transform: translateX(110vw); }
+            to { transform: translateX(-100px); }
+        }
+        .flying-bird {
+            position: absolute;
+            opacity: 0.5;
+            animation: flyAcross linear infinite;
+        }
+    </style>
+</head>
+<body class="antialiased overflow-hidden h-screen w-screen flex flex-col items-center justify-center p-2">
+
+    <div id="game-container" class="w-full max-w-lg h-full bg-sky-400 rounded-2xl shadow-2xl p-4 flex flex-col relative overflow-hidden border-4 border-amber-800">
+
+        <div id="sky-elements" class="absolute inset-0 z-0 overflow-hidden">
+            <img src="sky.png" class="flying-bird" style="width: 70px; top: 15%; animation-duration: 20s; animation-delay: -5s;" onerror="this.style.display='none';">
+            <img src="sky.png" class="flying-bird" style="width: 50px; top: 25%; animation-duration: 15s; animation-delay: 0s;" onerror="this.style.display='none';">
+            <img src="sky.png" class="flying-bird" style="width: 60px; top: 35%; animation-duration: 25s; animation-delay: -10s;" onerror="this.style.display='none';">
+        </div>
+
+        <div class="absolute bottom-4 left-4 z-20">
+            <button onclick="openSettingsModal()" class="w-16 h-16 text-5xl transform transition hover:scale-110 text-shadow">
+                ⚙️
+            </button>
+        </div>
+
+        <header class="flex justify-between items-center w-full mb-4 z-10 h-20">
+            <div class="w-20 h-20">
+                <img id="sun-img" src="sun.png" alt="خورشید" class="w-full h-full object-contain" onerror="this.onerror=null; this.outerHTML='<div class=\'w-20 h-20 bg-yellow-300 rounded-full\'></div>';">
+            </div>
+
+            <div class="flex items-center">
+                <span id="coin-counter" class="text-4xl font-bold text-white text-shadow mr-2">0</span>
+                <span class="text-5xl">💰</span>
+            </div>
+        </header>
+
+        <main class="flex-grow flex flex-col justify-center items-center relative -mt-8">
+            <div class="absolute inset-0 bg-cover bg-bottom" style="background-image: url('grassland.png');" onerror="this.style.backgroundImage='none'; this.style.backgroundColor='#90EE90';"></div>
+
+            <h1 class="text-6xl font-extrabold text-white z-10 mb-8 text-shadow">مزرعه کلمات</h1>
+
+            <div class="grid grid-cols-3 gap-4 md:gap-6 z-10"></div>
+
+            <div id="scarecrow" class="absolute bottom-4 right-2 w-24 h-24 flex flex-col items-center z-10">
+                 <div id="scarecrow-speech-bubble" class="hidden absolute -top-24 -right-2 bg-white p-3 rounded-lg shadow-md text-center text-sm w-44">
+                    روی یک زمین خالی کلیک کن تا یک کلمه بکاری!
+                 </div>
+                 <img id="scarecrow-img" src="scarecrow.png" alt="مترسک راهنما" class="w-24 h-24 object-contain" onerror="this.onerror=null; this.outerHTML='<div class=\'text-6xl\'>🤠</div>';">
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="settings-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-yellow-50 rounded-xl shadow-lg p-6 w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold text-amber-800 mb-6">تنظیمات</h2>
+
+            <div class="mt-6">
+                 <button id="reset-game-button" class="w-full bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full transition-transform transform hover:scale-105">
+                    شروع مجدد بازی
+                 </button>
+                 <p class="text-xs text-gray-500 mt-2">تمام پیشرفت شما حذف خواهد شد!</p>
+            </div>
+
+            <button onclick="closeSettingsModal()" class="mt-8 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-full">بستن</button>
+        </div>
+    </div>
+
+    <div id="seed-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-yellow-50 rounded-xl shadow-lg p-6 w-full max-w-md text-center">
+            <h2 class="text-2xl font-bold text-amber-800 mb-4">یک بذر برای کاشتن انتخاب کن!</h2>
+            <div id="lesson-container" class="space-y-4 max-h-[70vh] overflow-y-auto pr-2"></div>
+            <button onclick="closeSeedModal()" class="mt-6 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full transition-transform transform hover:scale-105">بستن</button>
+        </div>
+    </div>
+
+    <div id="minigame-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div id="minigame-content" class="bg-sky-100 rounded-xl shadow-lg p-6 w-full max-w-md text-center relative">
+            <h2 class="text-2xl font-bold text-sky-800 mb-2">کلمه رو درست کن!</h2>
+            <div id="minigame-image" class="text-6xl mb-4"></div>
+            <div id="letter-dropzones" class="flex justify-center items-center gap-2 mb-6 h-20"></div>
+            <div class="relative bg-white/50 p-4 rounded-lg h-24">
+                 <div id="letter-draggables" class="flex justify-center items-center gap-3 h-full"></div>
+            </div>
+            <button onclick="closeMinigameModal()" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-full transition-transform transform hover:scale-105">انصراف</button>
+        </div>
+    </div>
+
+    <div id="message-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm text-center">
+            <div id="message-icon" class="text-6xl mb-4"></div>
+            <p id="message-text" class="text-xl font-semibold text-gray-700 mb-6"></p>
+            <button onclick="closeMessageModal()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full transition-transform transform hover:scale-105">باشه!</button>
+        </div>
+    </div>
+
+    <div id="start-game-overlay" class="fixed inset-0 bg-black/70 z-50 flex flex-col items-center justify-center cursor-pointer">
+        <h1 class="text-5xl font-bold text-white mb-4">مزرعه کلمات</h1>
+        <p class="text-2xl text-yellow-300">برای شروع کلیک کنید</p>
+    </div>
+
+    <script>
+        // --- GAME DATA (CORRECTED & EXPANDED) ---
+        const lessons = [
+            { id: 1, title: 'درس ۱: آ ا / ب', words: [ { word: 'آب', letters: ['آ', 'ب'], crop: '💧' }, { word: 'بابا', letters: ['ب', 'ا', 'ب', 'ا'], crop: '👨‍👧' } ] },
+            { id: 2, title: 'درس ۲: اَ َ / د', words: [ { word: 'ادب', letters: ['اَ', 'دَ', 'ب'], crop: '📖' }, { word: 'داد', letters: ['د', 'ا', 'د'], crop: '⚖️' }, { word: 'باد', letters: ['ب', 'ا', 'د'], crop: '💨' } ] },
+            { id: 3, title: 'درس ۳: م / س', words: [ { word: 'مادر', letters: ['ما', 'دَر'], crop: '👩‍👧' }, { word: 'اسب', letters: ['اَس', 'ب'], crop: '🐎' }, { word: 'سبد', letters: ['سَ', 'بَد'], crop: '🧺' } ] },
+            { id: 4, title: 'درس ۴: او و / ت', words: [ { word: 'توت', letters: ['تو', 'ت'], crop: '🍓' }, { word: 'دود', letters: ['دو', 'د'], crop: '💨' }, { word: 'دست', letters: ['دَس', 'ت'], crop: '✋' }, { word: 'آتو', letters: ['آ', 'تو'], crop: '🃏' } ] },
+            { id: 5, title: 'درس ۵: ر', words: [ { word: 'ابر', letters: ['اَب', 'ر'], crop: '☁️' }, { word: 'برادر', letters: ['بَ', 'را', 'دَر'], crop: '👨‍👦' }, { word: 'دارا', letters: ['دا', 'را'], crop: '🧍‍♂️' }, { word: 'مار', letters: ['ما', 'ر'], crop: '🐍' } ] },
+            { id: 6, title: 'درس ۶: ن', words: [ { word: 'نان', letters: ['نا', 'ن'], crop: '🍞' }, { word: 'انار', letters: ['اَ', 'نا', 'ر'], crop: ' B' }, { word: 'باران', letters: ['با', 'ران'], crop: '🌧️' }, { word: 'دندان', letters: ['دَن', 'دان'], crop: '🦷' } ] },
+            { id: 7, title: 'درس ۷: ای', words: [ { word: 'ایران', letters: ['ای', 'ران'], crop: '🇮🇷' }, { word: 'سیب', letters: ['سی', 'ب'], crop: '🍎' }, { word: 'بینی', letters: ['بی', 'نی'], crop: '👃' }, { word: 'سینی', letters: ['سی', 'نی'], crop: '🍽️' }, { word: 'آبی', letters: ['آ', 'بی'], crop: '🔵' } ] },
+            { id: 8, title: 'درس ۸: ز', words: [ { word: 'زنبور', letters: ['زَن', 'بور'], crop: '🐝' }, { word: 'میز', letters: ['می', 'ز'], crop: '🖥️' }, { word: 'بازو', letters: ['با', 'زو'], crop: '💪' }, { word: 'سبزی', letters: ['سَب', 'زی'], crop: '🥬' }, { word: 'زیپ', letters: ['زی', 'پ'], crop: '🤐' } ] },
+            { id: 9, title: 'درس ۹: اِ ِ ـه ه', words: [ { word: 'اِسم', letters: ['اِس', 'م'], crop: '📛' }, { word: 'پسر', letters: ['پِ', 'سَر'], crop: '👦' }, { word: 'ستاره', letters: ['سِ', 'تا', 'ره'], crop: '⭐' }, { word: 'دانه', letters: ['دا', 'نه'], crop: '🌱' }, { word: 'نرده', letters: ['نَر', 'ده'], crop: '🚧' } ] },
+            { id: 10, title: 'درس ۱۰: ش', words: [ { word: 'شیر', letters: ['شی', 'ر'], crop: '🦁' }, { word: 'آش', letters: ['آ', 'ش'], crop: '🥣' }, { word: 'ماشین', letters: ['ما', 'شین'], crop: '🚗' }, { word: 'شانه', letters: ['شا', 'نه'], crop: ' B' }, { word: 'تراش', letters: ['تَ', 'راش'], crop: '✏️' }, { word: 'دوش', letters: ['دو', 'ش'], crop: '🚿' } ] },
+            { id: 11, title: 'درس ۱۱: ی', words: [ { word: 'یخ', letters: ['یَ', 'خ'], crop: '🧊' }, { word: 'چای', letters: ['چا', 'ی'], crop: '🍵' }, { word: 'دریا', letters: ['دَر', 'یا'], crop: '🌊' }, { word: 'پیاز', letters: ['پِ', 'یاز'], crop: '🧅' }, { word: 'سایه', letters: ['سا', 'یه'], crop: '🌳' }, { word: 'میدان', letters: ['مِی', 'دان'], crop: '🏟️' } ] },
+            { id: 12, title: 'درس ۱۲: اُ ُ', words: [ { word: 'اردک', letters: ['اُر', 'دَک'], crop: '🦆' }, { word: 'بز', letters: ['بُ', 'ز'], crop: '🐐' }, { word: 'گُل', letters: ['گُ', 'ل'], crop: '🌸' }, { word: 'سُرمه', letters: ['سُر', 'مه'], crop: '👁️‍🗨️' }, { word: 'دُرُست', letters: ['دُ', 'رُست'], crop: '👍' }, { word: 'مُدیر', letters: ['مُ', 'دیر'], crop: '👔' } ] },
+            { id: 13, title: 'درس ۱۳: ک', words: [ { word: 'کتاب', letters: ['کِ', 'تاب'], crop: '📚' }, { word: 'نمک', letters: ['نَ', 'مَک'], crop: '🧂' }, { word: 'بادکنک', letters: ['باد', 'کُ', 'نَک'], crop: '🎈' }, { word: 'کودک', letters: ['کو', 'دَک'], crop: '👶' }, { word: 'نیمکت', letters: ['نیم', 'کَت'], crop: '🪑' } ] },
+            { id: 14, title: 'درس ۱۴: و', words: [ { word: 'ورزش', letters: ['وَر', 'زِش'], crop: '⚽' }, { word: 'گاو', letters: ['گا', 'و'], crop: '🐄' }, { word: 'دیوار', letters: ['دی', 'وار'], crop: '🧱' }, { word: 'روستا', letters: ['روس', 'تا'], crop: '🏡' }, { word: 'نو', letters: ['نُو'], crop: '✨' } ] },
+            { id: 15, title: 'درس ۱۵: پ / گ', words: [ { word: 'پارک', letters: ['پار', 'ک'], crop: '🏞️' }, { word: 'گرگ', letters: ['گُر', 'گ'], crop: '🐺' }, { word: 'پدر', letters: ['پِ', 'دَر'], crop: '👨' }, { word: 'توپ', letters: ['تو', 'پ'], crop: '⚽' }, { word: 'برگ', letters: ['بَر', 'گ'], crop: '🍃' }, { word: 'سگ', letters: ['سَ', 'گ'], crop: '🐶' } ] },
+            { id: 16, title: 'درس ۱۶: ف / خ', words: [ { word: 'فرش', letters: ['فَر', 'ش'], crop: '毯' }, { word: 'شاخه', letters: ['شا', 'خه'], crop: '🌿' }, { word: 'میخ', letters: ['می', 'خ'], crop: '🔩' }, { word: 'برف', letters: ['بَر', 'ف'], crop: '❄️' }, { word: 'کیف', letters: ['کی', 'ف'], crop: '👜' }, { word: 'سفره', letters: ['سُف', 'ره'], crop: '🍽️' }, { word: 'شاخ', letters: ['شا', 'خ'], crop: '🦌' } ] },
+            { id: 17, title: 'درس ۱۷: ق / ل', words: [ { word: 'قوری', letters: ['قو', 'ری'], crop: '🫖' }, { word: 'قاشق', letters: ['قا', 'شُق'], crop: '🥄' }, { word: 'پول', letters: ['پو', 'ل'], crop: '💵' }, { word: 'قلب', letters: ['قَل', 'ب'], crop: '❤️' }, { word: 'قلم', letters: ['قَ', 'لَم'], crop: '✏️' }, { word: 'گلایل', letters: ['گ', 'لا', 'یُل'], crop: '🌺' }, { word: 'بیل', letters: ['بی', 'ل'], crop: '⛏️' } ] },
+            { id: 18, title: 'درس ۱۸: ج / ه', words: [ { word: 'جوراب', letters: ['جو', 'راب'], crop: '🧦' }, { word: 'برج', letters: ['بُر', 'ج'], crop: '🗼' }, { word: 'ماه', letters: ['ما', 'ه'], crop: '🌙' }, { word: 'کاج', letters: ['کا', 'ج'], crop: '🌲' }, { word: 'جوجه', letters: ['جو', 'جه'], crop: '🐥' }, { word: 'کوه', letters: ['کو', 'ه'], crop: '⛰️' } ] },
+            { id: 19, title: 'درس ۱۹: چ / ژ', words: [ { word: 'چتر', letters: ['چَت', 'ر'], crop: '☂️' }, { word: 'قارچ', letters: ['قار', 'چ'], crop: '🍄' }, { word: 'ژاله', letters: ['ژا', 'له'], crop: '👩' }, { word: 'چوب', letters: ['چو', 'ب'], crop: '🪵' }, { word: 'پارچه', letters: ['پار', 'چه'], crop: '🧵' }, { word: 'ژاکت', letters: ['ژا', 'کَت'], crop: '🧥' } ] },
+            { id: 20, title: 'درس ۲۰: ـّ (تشدید)', words: [ { word: 'بنّا', letters: ['بَن', 'نا'], crop: '👷' }, { word: 'ارّه', letters: ['اَر', 'ره'], crop: '🪚' }, { word: 'پلّه', letters: ['پِل', 'له'], crop: '📶' }, { word: 'اوّل', letters: ['اَو', 'وَل'], crop: '🥇' }, { word: 'بقّال', letters: ['بَق', 'قال'], crop: '🏪' }, { word: 'درّه', letters: ['دَر', 'ره'], crop: '🏞️' } ] },
+        ].map(lesson => ({ ...lesson, isLocked: lesson.id !== 1 }));
+
+        // --- GAME STATE ---
+        const initialGameState = { coins: 0, farmPlots: Array(6).fill({ planted: null, isFertile: false }), completedWords: [], unlockedLessons: [1] };
+        let gameState = JSON.parse(JSON.stringify(initialGameState));
+        let selectedPlotIndex = null;
+        let currentWord = null;
+        let fertilePlotInterval = null;
+        let scarecrowMessageCooldown = false;
+        const SCARECOW_COOLDOWN_MS = 10000;
+
+        let messageQueue = [];
+        let isMessageVisible = false;
+        let hasUserInteracted = false;
+
+        // --- DOM ELEMENTS ---
+        const coinCounter = document.getElementById('coin-counter');
+        const farmGrid = document.querySelector('.grid');
+        const seedModal = document.getElementById('seed-modal');
+        const minigameModal = document.getElementById('minigame-modal');
+        const messageModal = document.getElementById('message-modal');
+        const lessonContainer = document.getElementById('lesson-container');
+        const scarecrowSpeechBubble = document.getElementById('scarecrow-speech-bubble');
+        const startGameOverlay = document.getElementById('start-game-overlay');
+        const settingsModal = document.getElementById('settings-modal');
+        const resetGameButton = document.getElementById('reset-game-button');
+
+        // --- AUDIO ENGINE ---
+        function playSound(filename) {
+            if (!hasUserInteracted) return;
+            // PWA ADDITION: Try to load sound from local files first, fallback to a generic sound if needed.
+            // For simplicity, this example assumes sounds are optional or handled by the browser.
+            // You might want to include sound files in your project and adjust the path.
+            // const audio = new Audio(filename.startsWith('http') ? filename : `./sounds/${filename}`);
+            const audio = new Audio(filename);
+            audio.play().catch(() => {}); // Catch errors if file not found or autoplay fails
+        }
+
+        // --- DRAG & DROP LOGIC ---
+        let draggedEl = null;
+
+        function onPointerDown(e) {
+            if (!e.target.classList.contains('letter-draggable')) return;
+            e.preventDefault();
+            draggedEl = e.target;
+            const rect = draggedEl.getBoundingClientRect();
+            const offsetX = (e.clientX || e.touches[0].clientX) - rect.left;
+            const offsetY = (e.clientY || e.touches[0].clientY) - rect.top;
+            const clone = draggedEl.cloneNode(true);
+            draggedEl.style.opacity = '0.5';
+            clone.classList.add('dragging');
+            document.body.appendChild(clone);
+            clone.style.left = ((e.clientX || e.touches[0].clientX) - offsetX) + 'px';
+            clone.style.top = ((e.clientY || e.touches[0].clientY) - offsetY) + 'px';
+
+            const onMove = (moveEvent) => {
+                const currentX = moveEvent.clientX || moveEvent.touches[0].clientX;
+                const currentY = moveEvent.clientY || moveEvent.touches[0].clientY;
+                clone.style.left = (currentX - offsetX) + 'px';
+                clone.style.top = (currentY - offsetY) + 'px';
+                document.querySelectorAll('.letter-dropzone').forEach(zone => {
+                    const zoneRect = zone.getBoundingClientRect();
+                    if (currentX > zoneRect.left && currentX < zoneRect.right && currentY > zoneRect.top && currentY < zoneRect.bottom) {
+                        zone.classList.add('drag-over');
+                    } else {
+                        zone.classList.remove('drag-over');
+                    }
+                });
+            };
+
+            const onUp = (upEvent) => {
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                document.body.removeChild(clone);
+                draggedEl.style.opacity = '1';
+                const currentX = upEvent.clientX || upEvent.changedTouches[0].clientX;
+                const currentY = upEvent.clientY || upEvent.changedTouches[0].clientY;
+                document.querySelectorAll('.letter-dropzone').forEach(zone => {
+                    zone.classList.remove('drag-over');
+                    const zoneRect = zone.getBoundingClientRect();
+                    if (currentX > zoneRect.left && currentX < zoneRect.right && currentY > zoneRect.top && currentY < zoneRect.bottom) {
+                        validateDrop(zone, draggedEl);
+                    }
+                });
+            };
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+        }
+
+        function validateDrop(dropzone, originalEl) {
+            if (dropzone.dataset.filled === 'true') return;
+            const dropzoneIndex = parseInt(dropzone.dataset.index);
+            const correctLetter = currentWord.letters[dropzoneIndex];
+            if (originalEl.dataset.letter.normalize() === correctLetter.normalize()) {
+                dropzone.textContent = originalEl.dataset.letter;
+                dropzone.dataset.filled = 'true';
+                dropzone.classList.add('border-green-500', 'bg-green-200', 'text-4xl', 'font-bold');
+                originalEl.style.visibility = 'hidden';
+                checkWordCompletion();
+            } else {
+                dropzone.classList.add('animate-shake');
+                setTimeout(() => dropzone.classList.remove('animate-shake'), 500);
+            }
+        }
+
+        minigameModal.addEventListener('pointerdown', onPointerDown);
+
+        // --- GAME LOGIC FUNCTIONS ---
+        function saveGame() { localStorage.setItem('wordFarmState', JSON.stringify(gameState)); }
+        function loadGame() {
+            const savedState = localStorage.getItem('wordFarmState');
+            if (savedState) {
+                gameState = JSON.parse(savedState);
+                const unlockedIds = gameState.unlockedLessons || [1];
+                lessons.forEach(lesson => {
+                    lesson.isLocked = !unlockedIds.includes(lesson.id);
+                });
+            }
+            updateUI();
+        }
+        function updateUI() {
+            coinCounter.textContent = gameState.coins;
+            renderFarm();
+        }
+        function renderFarm() {
+            farmGrid.innerHTML = '';
+            gameState.farmPlots.forEach((plot, index) => {
+                const plotEl = document.createElement('div');
+                plotEl.className = "farm-plot w-24 h-24 rounded-lg shadow-inner flex items-center justify-center cursor-pointer transform transition hover:scale-105";
+                plotEl.dataset.index = index;
+                if (plot.isFertile && !plot.planted) {
+                    plotEl.classList.add('fertile-plot');
+                }
+                if (plot.planted) {
+                    plotEl.innerHTML = `<span class="text-5xl crop-grown">${plot.planted.crop}</span>`;
+                    plotEl.classList.add('planted');
+                    plotEl.onclick = () => harvestPlot(index);
+                } else {
+                    plotEl.innerHTML = `<span class="text-2xl text-amber-200">+</span>`;
+                    plotEl.onclick = () => openSeedModal(index);
+                }
+                farmGrid.appendChild(plotEl);
+            });
+        }
+        function showScarecrowMessage(text, soundFile, duration = 4000) {
+            if (scarecrowMessageCooldown) return;
+            scarecrowMessageCooldown = true;
+
+            scarecrowSpeechBubble.textContent = text;
+            scarecrowSpeechBubble.classList.remove('hidden');
+            if (soundFile) playSound(soundFile);
+
+            setTimeout(() => scarecrowSpeechBubble.classList.add('hidden'), duration);
+            setTimeout(() => { scarecrowMessageCooldown = false; }, SCARECOW_COOLDOWN_MS);
+        }
+
+        function queueMessage(icon, text, soundFile) {
+            messageQueue.push({ icon, text, soundFile });
+            processMessageQueue();
+        }
+        function processMessageQueue() {
+            if (isMessageVisible || messageQueue.length === 0) return;
+            isMessageVisible = true;
+            const message = messageQueue.shift();
+            document.getElementById('message-icon').textContent = message.icon;
+            document.getElementById('message-text').textContent = message.text;
+            messageModal.classList.remove('hidden');
+            if(message.soundFile) playSound(message.soundFile);
+        }
+        function closeMessageModal() {
+            messageModal.classList.add('hidden');
+            isMessageVisible = false;
+            setTimeout(processMessageQueue, 500);
+        }
+
+        function openSeedModal(plotIndex) {
+            if (gameState.farmPlots[plotIndex].planted) return;
+            selectedPlotIndex = plotIndex;
+            lessonContainer.innerHTML = '';
+            lessons.forEach(lesson => {
+                const lessonDiv = document.createElement('div');
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'flex justify-between items-center mb-2';
+
+                if (!lesson.isLocked) {
+                    lessonDiv.className = 'border-2 border-amber-300 rounded-lg p-3';
+                    headerDiv.innerHTML = `<h3 class="text-lg font-bold text-amber-700">${lesson.title}</h3>`;
+
+                    const completedCount = lesson.words.filter(w => gameState.completedWords.includes(w.word)).length;
+                    if (completedCount > 0) {
+                        const restartButton = document.createElement('button');
+                        restartButton.innerHTML = '🔄';
+                        restartButton.className = 'text-2xl transform transition hover:rotate-180';
+                        restartButton.title = 'شروع مجدد این درس';
+                        restartButton.onclick = (e) => { e.stopPropagation(); restartLesson(lesson.id); };
+                        headerDiv.appendChild(restartButton);
+                    }
+
+                    lessonDiv.appendChild(headerDiv);
+
+                    const wordsGrid = document.createElement('div');
+                    wordsGrid.className = 'grid grid-cols-3 gap-2';
+                    lesson.words.forEach(word => {
+                        const isCompleted = gameState.completedWords.includes(word.word);
+                        const wordButton = document.createElement('button');
+                        wordButton.className = `p-2 rounded-lg text-xl font-bold transition transform hover:scale-110 ${ isCompleted ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600 text-white' }`;
+                        wordButton.textContent = word.word;
+                        if (!isCompleted) wordButton.onclick = () => selectSeed(word);
+                        else wordButton.disabled = true;
+                        wordsGrid.appendChild(wordButton);
+                    });
+                    lessonDiv.appendChild(wordsGrid);
+                } else {
+                    lessonDiv.className = 'border-2 border-gray-300 rounded-lg p-3 bg-gray-100 text-gray-500 opacity-70';
+                    headerDiv.innerHTML = `<h3 class="text-lg font-bold">${lesson.title} (قفل) 🔒</h3>`;
+                    lessonDiv.appendChild(headerDiv);
+                }
+                 lessonContainer.appendChild(lessonDiv);
+            });
+            seedModal.classList.remove('hidden');
+        }
+        function closeSeedModal() { seedModal.classList.add('hidden'); }
+        function selectSeed(word) {
+            currentWord = word;
+            closeSeedModal();
+            startMinigame();
+        }
+        function startMinigame() {
+            document.getElementById('minigame-image').textContent = currentWord.crop;
+            const dropzonesContainer = document.getElementById('letter-dropzones');
+            const draggablesContainer = document.getElementById('letter-draggables');
+            dropzonesContainer.innerHTML = '';
+            draggablesContainer.innerHTML = '';
+            currentWord.letters.forEach((_, index) => {
+                const zone = document.createElement('div');
+                zone.className = 'letter-dropzone w-16 h-16 bg-white/70 rounded-lg border-2 border-dashed border-sky-400 flex items-center justify-center text-gray-400 text-2xl';
+                zone.dataset.index = index;
+                zone.textContent = '?';
+                dropzonesContainer.appendChild(zone);
+            });
+            [...currentWord.letters].sort(() => Math.random() - 0.5).forEach(letter => {
+                const el = document.createElement('div');
+                el.className = 'letter-draggable w-16 h-16 bg-yellow-300 rounded-lg flex items-center justify-center text-3xl font-bold text-yellow-800';
+                el.textContent = letter;
+                el.dataset.letter = letter;
+                draggablesContainer.appendChild(el);
+            });
+            minigameModal.classList.remove('hidden');
+        }
+        function closeMinigameModal() {
+            minigameModal.classList.add('hidden');
+            currentWord = null;
+        }
+        function checkWordCompletion() {
+            const isComplete = Array.from(document.querySelectorAll('.letter-draggable')).every(el => el.style.visibility === 'hidden');
+            if (isComplete) setTimeout(wordCompletedSuccessfully, 500);
+        }
+        function wordCompletedSuccessfully() {
+            if (!currentWord) return;
+            const completedWord = { ...currentWord };
+
+            gameState.farmPlots[selectedPlotIndex].planted = completedWord;
+            if (!gameState.completedWords.includes(completedWord.word)) {
+                gameState.completedWords.push(completedWord.word);
+            }
+
+            closeMinigameModal();
+            renderFarm();
+
+            queueMessage('✅', `آفرین! کلمه "${completedWord.word}" کاشته شد!`, 'success.mp3');
+
+            const unlockedLessonId = checkLessonUnlock(completedWord);
+            if (unlockedLessonId) {
+                const unlockedLesson = lessons.find(l => l.id === unlockedLessonId);
+                queueMessage('🎉', `عالیه! درس جدید "${unlockedLesson.title}" باز شد!`, 'unlock.mp3');
+            }
+            saveGame();
+        }
+        function checkLessonUnlock(completedWord) {
+            const currentLesson = lessons.find(l => l.words.some(w => w.word === completedWord.word));
+            if (!currentLesson) return null;
+
+            const allWordsInLesson = currentLesson.words.map(w => w.word);
+            const allWordsCompleted = allWordsInLesson.every(w => gameState.completedWords.includes(w));
+
+            if (allWordsCompleted) {
+                const nextLesson = lessons.find(l => l.id === currentLesson.id + 1);
+                if (nextLesson && nextLesson.isLocked) {
+                    nextLesson.isLocked = false;
+                    if (!gameState.unlockedLessons.includes(nextLesson.id)) {
+                        gameState.unlockedLessons.push(nextLesson.id);
+                        return nextLesson.id;
+                    }
+                }
+            }
+            return null;
+        }
+        function harvestPlot(index) {
+            const plot = gameState.farmPlots[index];
+            if (!plot.planted) return;
+            const coinsToAdd = plot.isFertile ? 10 : 5;
+            const message = plot.isFertile ? `محصول ویژه! ${coinsToAdd} سکه گرفتی! ✨` : `محصول خوبی بود! ${coinsToAdd} سکه گرفتی!`;
+            const soundFile = plot.isFertile ? 'harvest_bonus.mp3' : 'harvest_normal.mp3';
+
+            const plotElement = document.querySelector(`.grid > div[data-index='${index}']`);
+            const coinEl = document.createElement('span');
+            coinEl.textContent = `💰+${coinsToAdd}`;
+            coinEl.className = 'coin-animation text-2xl font-bold text-yellow-500';
+            plotElement.appendChild(coinEl);
+            showScarecrowMessage(message, soundFile, 3000);
+            setTimeout(() => {
+                gameState.coins += coinsToAdd;
+                gameState.farmPlots[index] = { planted: null, isFertile: false };
+                updateUI();
+                saveGame();
+            }, 1000);
+        }
+        function startFertilePlotBonus() {
+            clearInterval(fertilePlotInterval);
+            fertilePlotInterval = setInterval(() => {
+                gameState.farmPlots.forEach(p => p.isFertile = false);
+                const emptyPlotsIndexes = [];
+                gameState.farmPlots.forEach((plot, index) => { if (!plot.planted) emptyPlotsIndexes.push(index); });
+                if (emptyPlotsIndexes.length > 0) {
+                    const randomIndex = emptyPlotsIndexes[Math.floor(Math.random() * emptyPlotsIndexes.length)];
+                    gameState.farmPlots[randomIndex].isFertile = true;
+                    showScarecrowMessage("یک زمین حاصلخیز شد! عجله کن!", 'fertile.mp3', 4000);
+                }
+                renderFarm();
+                setTimeout(() => {
+                    const fertilePlot = gameState.farmPlots.find(p => p.isFertile);
+                    if (fertilePlot) {
+                        fertilePlot.isFertile = false;
+                        renderFarm();
+                    }
+                }, 15000);
+            }, 20000);
+        }
+
+        // Settings Functions
+        function openSettingsModal() { settingsModal.classList.remove('hidden'); }
+        function closeSettingsModal() { settingsModal.classList.add('hidden'); }
+
+        function resetGame() {
+            if (resetGameButton.dataset.confirm === 'true') {
+                localStorage.removeItem('wordFarmState');
+                window.location.reload();
+            } else {
+                resetGameButton.textContent = 'آیا مطمئن هستید؟';
+                resetGameButton.classList.remove('bg-red-500', 'hover:bg-red-700');
+                resetGameButton.classList.add('bg-yellow-500', 'hover:bg-yellow-600');
+                resetGameButton.dataset.confirm = 'true';
+                setTimeout(() => {
+                    resetGameButton.textContent = 'شروع مجدد بازی';
+                    resetGameButton.classList.add('bg-red-500', 'hover:bg-red-700');
+                    resetGameButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                    resetGameButton.dataset.confirm = 'false';
+                }, 3000);
+            }
+        }
+        function restartLesson(lessonId) {
+            const lessonWords = lessons.find(l => l.id === lessonId)?.words.map(w => w.word) || [];
+            if (lessonWords.length > 0) {
+                gameState.completedWords = gameState.completedWords.filter(word => !lessonWords.includes(word));
+                saveGame();
+                const currentPlotIndex = selectedPlotIndex;
+                closeSeedModal();
+                openSeedModal(currentPlotIndex);
+            }
+        }
+
+        // PWA ADDITION: Register the Service Worker
+        function init() {
+            loadGame();
+            startGameOverlay.addEventListener('click', () => {
+                hasUserInteracted = true;
+                startGameOverlay.classList.add('hidden');
+                showScarecrowMessage("به مزرعه کلمات خوش اومدی!", 'welcome.mp3', 4000);
+                startFertilePlotBonus();
+            }, { once: true });
+
+            resetGameButton.addEventListener('click', resetGame);
+
+            // PWA ADDITION: Service Worker Registration
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js')
+                        .then(registration => {
+                            console.log('Service Worker registered with scope:', registration.scope);
+                        })
+                        .catch(error => {
+                            console.log('Service Worker registration failed:', error);
+                        });
+                });
+            }
+            // End PWA ADDITION
+        }
+
+        init();
+    </script>
+</body>
+</html>
